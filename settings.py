@@ -140,7 +140,10 @@ class Settings:
 		self.SNMP_On_Off     = self.toBool(config.get('Responder Core', 'SNMP'))
 
 		# Db File
-		self.DatabaseFile    = os.path.join(self.ResponderPATH, config.get('Responder Core', 'Database'))
+		if options.DBFile == None:
+			self.DatabaseFile  = os.path.join(self.ResponderPATH, config.get('Responder Core', 'Database'))
+		else: 
+			self.DatabaseFile = options.DBFile
 
 		# Log Files
 		self.LogDir = os.path.join(self.ResponderPATH, 'logs')

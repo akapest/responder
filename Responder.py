@@ -50,6 +50,7 @@ parser.add_option('-t','--ttl',            action="store",      help="Change the
 parser.add_option('-N', '--AnswerName',	   action="store",      help="Specifies the canonical name returned by the LLMNR poisoner in its Answer section. By default, the answer's canonical name is the same as the query. Changing this value is mainly useful when attempting to perform Kerberos relaying over HTTP.", dest="AnswerName", default=None)
 parser.add_option('-E', '--ErrorCode',     action="store_true",      help="Changes the error code returned by the SMB server to STATUS_LOGON_FAILURE. By default, the status is STATUS_ACCESS_DENIED. Changing this value permits to obtain WebDAV authentications from the poisoned machines where the WebClient service is running.", dest="ErrorCode", default=False)
 parser.add_option('--dbfile',        	   action="store",      help="db file name", dest="DBFile", default=None)
+parser.add_option('-o', '--output-format',  action="store",      help="Output format: 'json' for JSON output (only interception results), 'text' for default text output. Default: text", dest="OutputFormat", metavar="json|text", default="text")
 options, args = parser.parse_args()
 
 if not os.geteuid() == 0:

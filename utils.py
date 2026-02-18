@@ -25,6 +25,7 @@ import datetime
 import codecs
 import struct
 import random
+import json
 try:
 	import netifaces
 except:
@@ -323,21 +324,32 @@ def CreateResponderDb():
 		cursor = sqlite3.connect(settings.Config.DatabaseFile)
 		cursor.execute('CREATE TABLE Poisoned (timestamp TEXT, Poisoner TEXT, SentToIp TEXT, ForName TEXT, AnalyzeMode TEXT)')
 		cursor.commit()
-		cursor.execute('CREATE TABLE responder (timestamp TEXT, module TEXT, type TEXT, client TEXT, hostname TEXT, user TEXT, cleartext TEXT, hash TEXT, fullhash TEXT)')
+		cursor.execute('CREATE TABLE responder (timestamp TEXT, module TEXT, type TEXT, client TEXT, hostname TEXT, user TEXT, cleartext TEXT, hash TEXT, fullhash TEXT, share_path TEXT)')
 		cursor.commit()
 		cursor.execute('CREATE TABLE DHCP (timestamp TEXT, MAC TEXT, IP TEXT, RequestedIP TEXT)')
 		cursor.commit()
 		cursor.close()
+	else:
+		# Add share_path column if it doesn't exist (for existing databases)
+		cursor = sqlite3.connect(settings.Config.DatabaseFile)
+		try:
+			cursor.execute('ALTER TABLE responder ADD COLUMN share_path TEXT')
+			cursor.commit()
+		except sqlite3.OperationalError:
+			# Column already exists, ignore
+			pass
+		cursor.close()
 
 def SaveToDb(result):
 
-	for k in [ 'module', 'type', 'client', 'hostname', 'user', 'cleartext', 'hash', 'fullhash' ]:
+	for k in [ 'module', 'type', 'client', 'hostname', 'user', 'cleartext', 'hash', 'fullhash', 'share_path' ]:
 		if not k in result:
 			result[k] = ''
 	result['client'] = result['client'].replace("::ffff:","")
 	if len(result['user']) < 2:
-		print(color('[*] Skipping one character username: %s' % result['user'], 3, 1))
-		text("[*] Skipping one character username: %s" % result['user'])
+		if settings.Config.OutputFormat != 'json':
+			print(color('[*] Skipping one character username: %s' % result['user'], 3, 1))
+			text("[*] Skipping one character username: %s" % result['user'])
 		return
 
 	cursor = sqlite3.connect(settings.Config.DatabaseFile)
@@ -354,7 +366,7 @@ def SaveToDb(result):
 	logfile = os.path.join(settings.Config.ResponderPATH, 'logs', fname)
 
 	if not count:
-		cursor.execute("INSERT INTO responder VALUES(datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)", (result['module'], result['type'], result['client'], result['hostname'], result['user'], result['cleartext'], result['hash'], result['fullhash']))
+		cursor.execute("INSERT INTO responder VALUES(datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)", (result['module'], result['type'], result['client'], result['hostname'], result['user'], result['cleartext'], result['hash'], result['fullhash'], result['share_path']))
 		cursor.commit()
 
 	if not count or settings.Config.CaptureMultipleHashFromSameHost:
@@ -364,39 +376,98 @@ def SaveToDb(result):
 			else:  # Otherwise, write JtR-style hash string to file
 				outf.write(result['fullhash'] + '\n')#.encode('utf8', 'replace') + '\n')
 
-	if not count or settings.Config.Verbose:  # Print output
-		if len(result['client']):
-			print(text("[%s] %s Client   : %s" % (result['module'], result['type'], color(result['client'], 3))))
-
-		if len(result['hostname']):
-			print(text("[%s] %s Hostname : %s" % (result['module'], result['type'], color(result['hostname'], 3))))
-
-		if len(result['user']):
-			print(text("[%s] %s Username : %s" % (result['module'], result['type'], color(result['user'], 3))))
-
-		# Bu order of priority, print cleartext, fullhash, or hash
-		if len(result['cleartext']):
-			print(text("[%s] %s Password : %s" % (result['module'], result['type'], color(result['cleartext'], 3))))
-
-		elif len(result['fullhash']):
-			print(text("[%s] %s Hash     : %s" % (result['module'], result['type'], color(result['fullhash'], 3))))
-
-		elif len(result['hash']):
-			print(text("[%s] %s Hash     : %s" % (result['module'], result['type'], color(result['hash'], 3))))
-
-		# Appending auto-ignore list if required
+	# JSON output mode - output only interception results
+	if settings.Config.OutputFormat == 'json':
+		if not count or settings.Config.Verbose:
+			json_output = {
+				'module': result['module'],
+				'type': result['type'],
+				'client': result['client'],
+				'hostname': result['hostname'] if result['hostname'] else None,
+				'user': result['user'],
+				'cleartext': result['cleartext'] if result['cleartext'] else None,
+				'hash': result['fullhash'] if result['fullhash'] else (result['hash'] if result['hash'] else None),
+				'share_path': result['share_path'] if result['share_path'] else None
+			}
+			# Remove None values for cleaner JSON
+			json_output = {k: v for k, v in json_output.items() if v is not None}
+			print(json.dumps(json_output, ensure_ascii=False))
+		
+		# Appending auto-ignore list if required (but don't print in JSON mode)
 		# Except if this is a machine account's hash
 		if settings.Config.AutoIgnore and not result['user'].endswith('$'):
 			settings.Config.AutoIgnoreList.append(result['client'])
-			print(color('[*] Adding client %s to auto-ignore list' % result['client'], 4, 1))
-	elif len(result['cleartext']):
-		print(color('[*] Skipping previously captured cleartext password for %s' % result['user'], 3, 1))
-		text('[*] Skipping previously captured cleartext password for %s' % result['user'])
 	else:
-		print(color('[*] Skipping previously captured hash for %s' % result['user'], 3, 1))
-		text('[*] Skipping previously captured hash for %s' % result['user'])
-		cursor.execute("UPDATE responder SET timestamp=datetime('now') WHERE user=? AND client=?", (result['user'], result['client']))
+		# Text output mode (default)
+		if not count or settings.Config.Verbose:  # Print output
+			if len(result['client']):
+				print(text("[%s] %s Client   : %s" % (result['module'], result['type'], color(result['client'], 3))))
+
+			if len(result['hostname']):
+				print(text("[%s] %s Hostname : %s" % (result['module'], result['type'], color(result['hostname'], 3))))
+
+			if len(result['user']):
+				print(text("[%s] %s Username : %s" % (result['module'], result['type'], color(result['user'], 3))))
+
+			# Bu order of priority, print cleartext, fullhash, or hash
+			if len(result['cleartext']):
+				print(text("[%s] %s Password : %s" % (result['module'], result['type'], color(result['cleartext'], 3))))
+
+			elif len(result['fullhash']):
+				print(text("[%s] %s Hash     : %s" % (result['module'], result['type'], color(result['fullhash'], 3))))
+
+			elif len(result['hash']):
+				print(text("[%s] %s Hash     : %s" % (result['module'], result['type'], color(result['hash'], 3))))
+
+			# Appending auto-ignore list if required
+			# Except if this is a machine account's hash
+			if settings.Config.AutoIgnore and not result['user'].endswith('$'):
+				settings.Config.AutoIgnoreList.append(result['client'])
+				print(color('[*] Adding client %s to auto-ignore list' % result['client'], 4, 1))
+		elif len(result['cleartext']):
+			print(color('[*] Skipping previously captured cleartext password for %s' % result['user'], 3, 1))
+			text('[*] Skipping previously captured cleartext password for %s' % result['user'])
+		else:
+			print(color('[*] Skipping previously captured hash for %s' % result['user'], 3, 1))
+			text('[*] Skipping previously captured hash for %s' % result['user'])
+			cursor.execute("UPDATE responder SET timestamp=datetime('now') WHERE user=? AND client=?", (result['user'], result['client']))
+			cursor.commit()
+	cursor.close()
+
+def UpdateSharePath(client, share_path):
+	"""Update the most recent SMB record for a client with the share_path"""
+	if not share_path:
+		return
+	cursor = sqlite3.connect(settings.Config.DatabaseFile)
+	cursor.text_factory = sqlite3.Binary
+	# Update the most recent SMB record for this client that doesn't have a share_path yet
+	# First get the rowid of the most recent record
+	res = cursor.execute("SELECT rowid FROM responder WHERE module='SMB' AND client=? AND (share_path IS NULL OR share_path='') ORDER BY timestamp DESC LIMIT 1", (client,))
+	row = res.fetchone()
+	if row:
+		rowid = row[0]
+		cursor.execute("UPDATE responder SET share_path=? WHERE rowid=?", (share_path, rowid))
 		cursor.commit()
+		
+		# If JSON mode, output the updated record
+		if settings.Config.OutputFormat == 'json':
+			res = cursor.execute("SELECT module, type, client, hostname, user, cleartext, hash, fullhash, share_path FROM responder WHERE rowid=?", (rowid,))
+			row = res.fetchone()
+			if row:
+				json_output = {
+					'module': row[0] if row[0] else None,
+					'type': row[1] if row[1] else None,
+					'client': row[2] if row[2] else None,
+					'hostname': row[3] if row[3] else None,
+					'user': row[4] if row[4] else None,
+					'cleartext': row[5] if row[5] else None,
+					'hash': row[7] if row[7] else (row[6] if row[6] else None),
+					'share_path': row[8] if row[8] else None
+				}
+				# Remove None values for cleaner JSON
+				json_output = {k: v for k, v in json_output.items() if v is not None}
+				print(json.dumps(json_output, ensure_ascii=False))
+	
 	cursor.close()
 
 def SavePoisonersToDb(result):

@@ -64,7 +64,10 @@ def ParseShare(data):
 	packet = data[:]
 	a = re.search(b'(\\x5c\\x00\\x5c.*.\\x00\\x00\\x00)', packet)
 	if a:
-		print(text("[SMB] Requested Share     : %s" % a.group(0).decode('UTF-16LE')))
+		share_path = a.group(0).decode('UTF-16LE')
+		print(text("[SMB] Requested Share     : %s" % share_path))
+		return share_path
+	return None
 
 def GrabMessageID(data):
     Messageid = data[28:36]
@@ -319,7 +322,9 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 				
 
 				if data[8:10] == b"\x75\x00" and data[4:5] == b"\xff":  # Tree Connect AndX Request
-					ParseShare(data)
+					share_path = ParseShare(data)
+					if share_path:
+						UpdateSharePath(self.client_address[0], share_path)
 					Header = SMBHeader(cmd="\x75",flag1="\x88", flag2="\x01\xc8", errorcode="\x00\x00\x00\x00", pid=pidcalc(NetworkRecvBufferPython2or3(data)), tid=chr(randrange(256))+chr(randrange(256)), uid=uidcalc(data), mid=midcalc(NetworkRecvBufferPython2or3(data)))
 					Body = SMBTreeData()
 					Body.calculate()

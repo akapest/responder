@@ -645,5 +645,3 @@ def StartupMessage():
 	#credits
 	print('')
 	print(color("[*] ", 2, 1)+"Version: "+settings.__version__)
-	print(color("[*] ", 2, 1)+"Author: Laurent Gaffie, <lgaffie@secorizon.com>")
-	print(color("[*] ", 2, 1)+"To sponsor Responder: https://paypal.me/PythonResponder")

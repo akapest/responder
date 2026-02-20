@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import struct, re
+import os
 import codecs
 from utils import *
 if settings.Config.PY2OR3 == "PY3":
@@ -111,11 +112,11 @@ def ParseSMBHash(data,client, Challenge):  #Parse SMB NTLMSSP v1/v2
 		WriteHash    = '%s::%s:%s:%s:%s' % (Username, Domain, LMHash, SMBHash, codecs.encode(Challenge,'hex').decode('latin-1'))
 
 		SaveToDb({
-			'module': 'SMB', 
-			'type': 'NTLMv1-SSP', 
-			'client': client, 
-			'user': Domain+'\\'+Username, 
-			'hash': SMBHash, 
+			'module': 'SMB',
+			'type': 'NTLMv1-SSP',
+			'client': client,
+			'user': Domain+'\\'+Username,
+			'hash': SMBHash,
 			'fullhash': WriteHash,
 		})
 
@@ -131,11 +132,11 @@ def ParseSMBHash(data,client, Challenge):  #Parse SMB NTLMSSP v1/v2
 		WriteHash    = '%s::%s:%s:%s:%s' % (Username, Domain, codecs.encode(Challenge,'hex').decode('latin-1'), SMBHash[:32], SMBHash[32:])
 
 		SaveToDb({
-			'module': 'SMB', 
-			'type': 'NTLMv2-SSP', 
-			'client': client, 
-			'user': Domain+'\\'+Username, 
-			'hash': SMBHash, 
+			'module': 'SMB',
+			'type': 'NTLMv2-SSP',
+			'client': client,
+			'user': Domain+'\\'+Username,
+			'hash': SMBHash,
 			'fullhash': WriteHash,
 		})
 
@@ -150,13 +151,13 @@ def ParseLMNTHash(data, client, Challenge):  # Parse SMB NTLMv1/v2
 		LmHash = FullHash[:32].upper()
 		NtHash = FullHash[32:].upper()
 		WriteHash = '%s::%s:%s:%s:%s' % (Username, Domain, codecs.encode(Challenge,'hex').decode('latin-1'), LmHash.decode('latin-1'), NtHash.decode('latin-1'))
-	
+
 		SaveToDb({
-			'module': 'SMB', 
-			'type': 'NTLMv2', 
-			'client': client, 
-			'user': Domain+'\\'+Username, 
-			'hash': NtHash, 
+			'module': 'SMB',
+			'type': 'NTLMv2',
+			'client': client,
+			'user': Domain+'\\'+Username,
+			'hash': NtHash,
 			'fullhash': WriteHash,
 		})
 
@@ -165,11 +166,11 @@ def ParseLMNTHash(data, client, Challenge):  # Parse SMB NTLMv1/v2
 		LmHash = codecs.encode(data[65:65+LMhashLen],'hex').upper()
 		WriteHash = '%s::%s:%s:%s:%s' % (Username, Domain, LmHash.decode('latin-1'), NtHash.decode('latin-1'), codecs.encode(Challenge,'hex').decode('latin-1'))
 		SaveToDb({
-			'module': 'SMB', 
-			'type': 'NTLMv1', 
-			'client': client, 
-			'user': Domain+'\\'+Username, 
-			'hash': NtHash, 
+			'module': 'SMB',
+			'type': 'NTLMv1',
+			'client': client,
+			'user': Domain+'\\'+Username,
+			'hash': NtHash,
 			'fullhash': WriteHash,
 		})
 
@@ -204,6 +205,7 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					break
 
 				if data[0:1] == b"\x81":  #session request 139
+					print("session request 139")
 					Buffer = "\x82\x00\x00\x00"
 					try:
 						self.request.send(Buffer)
@@ -211,8 +213,9 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					except:
 						pass
 
-                                ##Negotiate proto answer SMBv2.
+				##Negotiate proto answer SMBv2.
 				if data[8:10] == b"\x72\x00" and re.search(rb"SMB 2.\?\?\?", data):
+					print("Negotiate proto answer SMBv2")
 					head = SMB2Header(CreditCharge="\x00\x00",Credits="\x01\x00")
 					t = SMB2NegoAns()
 					t.calculate()
@@ -221,44 +224,68 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
 
-                                ## Nego answer SMBv2.
+				## Nego answer SMBv2.
 				if data[16:18] == b"\x00\x00" and data[4:5] == b"\xfe":
-					head = SMB2Header(MessageId=GrabMessageID(data).decode('latin-1'), PID="\xff\xfe\x00\x00", CreditCharge=GrabCreditCharged(data).decode('latin-1'), Credits=GrabCreditRequested(data).decode('latin-1'))
+					print("Nego answer SMBv2")
+					head = SMB2Header(
+						MessageId=GrabMessageID(data).decode('latin-1'),
+						PID="\xff\xfe\x00\x00",
+						CreditCharge=GrabCreditCharged(data).decode('latin-1'),
+						Credits=GrabCreditRequested(data).decode('latin-1')
+					)
 					t = SMB2NegoAns(Dialect="\x10\x02")
 					t.calculate()
 					packet1 = str(head)+str(t)
 					buffer1 = StructPython2or3('>i', str(packet1))+str(packet1)
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
-                                ## Session Setup 2 answer SMBv2.
+
+				## Session Setup 2 answer SMBv2.
 				if data[16:18] == b"\x01\x00" and data[4:5] == b"\xfe":
-					head = SMB2Header(Cmd="\x01\x00", MessageId=GrabMessageID(data).decode('latin-1'), PID="\xff\xfe\x00\x00", CreditCharge=GrabCreditCharged(data).decode('latin-1'), Credits=GrabCreditRequested(data).decode('latin-1'), SessionID=GrabSessionID(data).decode('latin-1'),NTStatus="\x16\x00\x00\xc0")
+					print("Session Setup 2 answer SMBv2.")
+					head = SMB2Header(
+						Cmd="\x01\x00",
+						MessageId=GrabMessageID(data).decode('latin-1'),
+						PID="\xff\xfe\x00\x00",
+						CreditCharge=GrabCreditCharged(data).decode('latin-1'),
+						Credits=GrabCreditRequested(data).decode('latin-1'),
+						SessionID=GrabSessionID(data).decode('latin-1'),
+						NTStatus="\x16\x00\x00\xc0", # STATUS_MORE_PROCESSING_REQUIRED
+					)
 					t = SMB2Session1Data(NTLMSSPNtServerChallenge=NetworkRecvBufferPython2or3(Challenge))
 					t.calculate()
 					packet1 = str(head)+str(t)
 					buffer1 = StructPython2or3('>i', str(packet1))+str(packet1)
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
-                                ## Session Setup 3 answer SMBv2.
-				if data[16:18] == b'\x01\x00' and GrabMessageID(data)[0:1] == b'\x02' or GrabMessageID(data)[0:1] == b'\x03' and data[4:5] == b'\xfe':
+
+				## Session Setup 3 answer SMBv2.
+				if data[16:18] == b'\x01\x00' and data[4:5] == b'\xfe' and (GrabMessageID(data)[0:1] == b'\x02' or GrabMessageID(data)[0:1] == b'\x03'):
+					print("Session Setup 3 answer SMBv2.")
 					ParseSMBHash(data, self.client_address[0], Challenge)
-					if settings.Config.ErrorCode:
-						ntstatus="\x6d\x00\x00\xc0"
-					else:
-						ntstatus="\x22\x00\x00\xc0"
-					head = SMB2Header(Cmd="\x01\x00", MessageId=GrabMessageID(data).decode('latin-1'), PID="\xff\xfe\x00\x00", CreditCharge=GrabCreditCharged(data).decode('latin-1'), Credits=GrabCreditRequested(data).decode('latin-1'), NTStatus=ntstatus, SessionID=GrabSessionID(data).decode('latin-1'))
+					ntstatus = "\x00\x00\x00\x00"
+					head = SMB2Header(
+						Cmd="\x01\x00",
+						MessageId=GrabMessageID(data).decode('latin-1'),
+						PID="\xff\xfe\x00\x00",
+						CreditCharge=GrabCreditCharged(data).decode('latin-1'),
+						Credits=GrabCreditRequested(data).decode('latin-1'),
+						NTStatus=ntstatus,
+						SessionID=GrabSessionID(data).decode('latin-1')
+					)
 					t = SMB2Session2Data()
 					packet1 = str(head)+str(t)
 					buffer1 = StructPython2or3('>i', str(packet1))+str(packet1)
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
 
-                                # Negotiate Protocol Response smbv1
+				# Negotiate Protocol Response smbv1
 				if data[8:10] == b'\x72\x00' and data[4:5] == b'\xff' and re.search(rb'SMB 2.\?\?\?', data) == None:
+					print("Negotiate Protocol Response smbv1")
 					Header = SMBHeader(cmd="\x72",flag1="\x88", flag2="\x01\xc8", pid=pidcalc(NetworkRecvBufferPython2or3(data)),mid=midcalc(NetworkRecvBufferPython2or3(data)))
 					Body = SMBNegoKerbAns(Dialect=Parse_Nego_Dialect(NetworkRecvBufferPython2or3(data)))
 					Body.calculate()
-		
+
 					packet1 = str(Header)+str(Body)
 					Buffer = StructPython2or3('>i', str(packet1))+str(packet1)
 
@@ -266,8 +293,9 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					data = self.request.recv(1024)
 
 				if data[8:10] == b"\x73\x00" and data[4:5] == b"\xff":  # Session Setup AndX Request smbv1
+					print("Session Setup AndX Request smbv1")
 					IsNT4ClearTxt(data, self.client_address[0])
-					
+
 					# STATUS_MORE_PROCESSING_REQUIRED
 					Header = SMBHeader(cmd="\x73",flag1="\x88", flag2="\x01\xc8", errorcode="\x16\x00\x00\xc0", uid=chr(randrange(256))+chr(randrange(256)),pid=pidcalc(NetworkRecvBufferPython2or3(data)),tid="\x00\x00",mid=midcalc(NetworkRecvBufferPython2or3(data)))
 					if settings.Config.CaptureMultipleCredentials and self.ntry == 0:
@@ -275,7 +303,7 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					else:
 						Body = SMBSession1Data(NTLMSSPNtServerChallenge=NetworkRecvBufferPython2or3(Challenge))
 					Body.calculate()
-		
+
 					packet1 = str(Header)+str(Body)
 					Buffer = StructPython2or3('>i', str(packet1))+str(packet1)
 
@@ -319,9 +347,10 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 
 							self.request.send(NetworkSendBufferPython2or3(Buffer))
 							data = self.request.recv(1024)
-				
+
 
 				if data[8:10] == b"\x75\x00" and data[4:5] == b"\xff":  # Tree Connect AndX Request
+					print("Tree Connect AndX Request")
 					share_path = ParseShare(data)
 					if share_path:
 						UpdateSharePath(self.client_address[0], share_path)
@@ -366,10 +395,7 @@ class SMB1LM(BaseRequestHandler):  # SMB Server class, old version
 					self.request.send(NetworkSendBufferPython2or3(Buffer))
 				else:
 					ParseLMNTHash(data,self.client_address[0], Challenge)
-					if settings.Config.ErrorCode:
-						ntstatus="\x6d\x00\x00\xc0"
-					else:
-						ntstatus="\x22\x00\x00\xc0"
+					ntstatus = "\x00\x00\x00\x00"
 					head = SMBHeader(cmd="\x73",flag1="\x90", flag2="\x53\xc8",errorcode=ntstatus,pid=pidcalc(NetworkRecvBufferPython2or3(data)),tid=tidcalc(NetworkRecvBufferPython2or3(data)),uid=uidcalc(NetworkRecvBufferPython2or3(data)),mid=midcalc(NetworkRecvBufferPython2or3(data)))
 					Packet = str(head) + str(SMBSessEmpty())
 					Buffer = StructPython2or3('>i', str(Packet))+str(Packet)

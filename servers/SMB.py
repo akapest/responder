@@ -249,7 +249,7 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 						PID="\xff\xfe\x00\x00",
 						CreditCharge=GrabCreditCharged(data).decode('latin-1'),
 						Credits=GrabCreditRequested(data).decode('latin-1'),
-						SessionID=GrabSessionID(data).decode('latin-1'),
+						SessionID=os.urandom(8).decode('latin-1'),
 						NTStatus="\x16\x00\x00\xc0", # STATUS_MORE_PROCESSING_REQUIRED
 					)
 					t = SMB2Session1Data(NTLMSSPNtServerChallenge=NetworkRecvBufferPython2or3(Challenge))
@@ -273,9 +273,10 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 						NTStatus=ntstatus,
 						SessionID=GrabSessionID(data).decode('latin-1')
 					)
-					t = SMB2Session2Data()
-					packet1 = str(head)+str(t)
-					buffer1 = StructPython2or3('>i', str(packet1))+str(packet1)
+					final_spnego = "\xa1\x07\x30\x05\xa0\x03\x0a\x01\x00" # some valid value for SPNEGO NegTokenResp to complete the authentication process on SMBv2 clients
+					t = SMB2Session2Data(final_spnego)
+					packet1 = str(head) + str(t) + str(final_spnego)
+					buffer1 = StructPython2or3('>i', str(packet1)) + str(packet1)
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
 
@@ -363,7 +364,8 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 
 					self.request.send(NetworkSendBufferPython2or3(Buffer))
 					data = self.request.recv(1024)
-		except:
+		except Exception as e:
+			print(e)
 			pass
 
 

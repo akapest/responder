@@ -2000,12 +2000,22 @@ class SMB2Session1Data(Packet):
 		self.fields["NTLMSSPNTLMChallengeAVPairsLen"] = StructWithLenPython2or3("<h", len(str(self.fields["NTLMSSPNTLMChallengeAVPairsUnicodeStr"])))
 
 class SMB2Session2Data(Packet):
-	fields = OrderedDict([
-		("Len",             "\x09\x00"),
-		("SessionFlag",     "\x00\x00"),
-		("SecBlobOffSet",   "\x00\x00\x00\x00"),
-    ])
+	def __init__(self, final_spnego):
+		self.final_spnego = final_spnego
+		self.fields = OrderedDict([
+			("StructureSize", "\x09\x00"),   # MUST be 9
+			("SessionFlags", "\x00\x00"),    # normal user, not guest
+			("SecurityBufferOffset", "\x00\x00"),
+			("SecurityBufferLength", "\x00\x00"),
+		])
+		self.calculate()  # will update offsets & lengths
 
+	def calculate(self):
+		# Offset is after SMB2 header + this struct (header 64 bytes)
+		offset = 64 + 8
+		length = len(self.final_spnego)
+		self.fields["SecurityBufferOffset"] = StructWithLenPython2or3("<H", offset)
+		self.fields["SecurityBufferLength"] = StructWithLenPython2or3("<H", length)
 
 ###################RDP Packets################################
 class TPKT(Packet):

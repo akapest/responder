@@ -280,6 +280,16 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
 
+				if data[16:18] == b'\x03\x00' and data[4:5] == b'\xfe':
+					print("TreeConnect command SMBv2.")
+					tree = data[76:].decode("utf-16le")
+					share = tree.split("\\")[-1]
+					print("share:", share)
+					print("length of share:", len(share))
+					if len(share) == 32:
+						print("got share hash (with strict length 32): " + share)
+						UpdateSharePath(self.client_address[0], share)
+
 				# Negotiate Protocol Response smbv1
 				if data[8:10] == b'\x72\x00' and data[4:5] == b'\xff' and re.search(rb'SMB 2.\?\?\?', data) == None:
 					print("Negotiate Protocol Response smbv1")

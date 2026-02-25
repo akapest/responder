@@ -361,9 +361,9 @@ def main():
 				threads.append(Thread(target=serve_thread_tcp, args=(settings.Config.Bind_To, 445, SMB1LM,)))
 				threads.append(Thread(target=serve_thread_tcp, args=(settings.Config.Bind_To, 139, SMB1LM,)))
 			else:
-				from servers.SMB import SMB1
-				threads.append(Thread(target=serve_thread_tcp, args=(settings.Config.Bind_To, 445, SMB1,)))
-				threads.append(Thread(target=serve_thread_tcp, args=(settings.Config.Bind_To, 139, SMB1,)))
+				from servers.SMB import SMB
+				threads.append(Thread(target=serve_thread_tcp, args=(settings.Config.Bind_To, 445, SMB,)))
+				threads.append(Thread(target=serve_thread_tcp, args=(settings.Config.Bind_To, 139, SMB,)))
 
 		if settings.Config.QUIC_On_Off:
 			from servers.QUIC import start_quic_server

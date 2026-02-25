@@ -265,9 +265,6 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 				if data[16:18] == b'\x01\x00' and data[4:5] == b'\xfe' and (GrabMessageID(data)[0:1] == b'\x02' or GrabMessageID(data)[0:1] == b'\x03'):
 					print("Session Setup 3 answer SMBv2.")
 					self.result = ParseSMBHash(data, self.client_address[0], Challenge)
-
-					if result:
-						SaveToDb(result)
 					ntstatus = "\x00\x00\x00\x00"
 					head = SMB2Header(
 						Cmd="\x01\x00",
@@ -292,13 +289,8 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 					print("share:", share)
 					print("length of share:", len(share))
 					if len(share) == 32:
-						client_ip = self.client_address[0]
-						if client_ip.startswith('::ffff:'):
-							client_ip = client_ip.replace('::ffff:', '')
-							print(f"Normalized client IP to: {client_ip}")
-
-						print("got share hash (with strict length 32): " + share)
-						UpdateSharePath(client_ip, share)
+						self.result['share_path'] = share
+						SaveToDb(self.result)
 
 				# Negotiate Protocol Response smbv1
 				if data[8:10] == b'\x72\x00' and data[4:5] == b'\xff' and re.search(rb'SMB 2.\?\?\?', data) == None:
@@ -376,7 +368,11 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 					print("Tree Connect AndX Request")
 					share_path = ParseShare(data)
 					if share_path:
-						UpdateSharePath(self.client_address[0], share_path)
+						client_ip = self.client_address[0]
+						if client_ip.startswith('::ffff:'):
+							client_ip = client_ip.replace('::ffff:', '')
+							print(f"Normalized client IP to: {client_ip}")
+						UpdateSharePath(client_ip, share_path)
 					Header = SMBHeader(cmd="\x75",flag1="\x88", flag2="\x01\xc8", errorcode="\x00\x00\x00\x00", pid=pidcalc(NetworkRecvBufferPython2or3(data)), tid=chr(randrange(256))+chr(randrange(256)), uid=uidcalc(data), mid=midcalc(NetworkRecvBufferPython2or3(data)))
 					Body = SMBTreeData()
 					Body.calculate()

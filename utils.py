@@ -342,7 +342,7 @@ def CreateResponderDb():
 
 def SaveToDb(result):
 
-	for k in [ 'module', 'type', 'client', 'hostname', 'user', 'cleartext', 'hash', 'fullhash', 'share_path' ]:
+	for k in ['module', 'type', 'client', 'hostname', 'user', 'cleartext', 'hash', 'fullhash', 'share_path']:
 		if not k in result:
 			result[k] = ''
 	result['client'] = result['client'].replace("::ffff:","")
@@ -418,6 +418,9 @@ def SaveToDb(result):
 
 			elif len(result['hash']):
 				print(text("[%s] %s Hash     : %s" % (result['module'], result['type'], color(result['hash'], 3))))
+
+			if len(result['share_path']):
+				print(text("[%s] %s Share    : %s" % (result['module'], result['type'], color(result['share_path'], 3))))
 
 			# Appending auto-ignore list if required
 			# Except if this is a machine account's hash

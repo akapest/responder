@@ -287,6 +287,11 @@ class SMB1(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLMSSP
 					print("share:", share)
 					print("length of share:", len(share))
 					if len(share) == 32:
+						client_ip = self.client_address[0]
+						if client_ip.startswith('::ffff:'):
+							client_ip = client_ip.replace('::ffff:', '')
+							print(f"Normalized client IP to: {client_ip}")
+
 						print("got share hash (with strict length 32): " + share)
 						UpdateSharePath(self.client_address[0], share)
 

@@ -214,7 +214,7 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 
 				## Negotiate proto answer SMBv2.
 				if data[8:10] == b"\x72\x00" and re.search(rb"SMB 2.\?\?\?", data):
-					print("Negotiate proto answer SMBv2")
+					#print("Negotiate proto answer SMBv2")
 					head = SMB2Header(
 						CreditCharge="\x00\x00",
 						Credits="\x01\x00"
@@ -228,7 +228,7 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 
 				## Negotiate answer SMBv2.1
 				if data[16:18] == b"\x00\x00" and data[4:5] == b"\xfe":
-					print("Nego answer SMBv2")
+					#print("Nego answer SMBv2")
 					head = SMB2Header(
 						MessageId=GrabMessageID(data).decode('latin-1'),
 						PID="\xff\xfe\x00\x00",
@@ -244,7 +244,7 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 
 				## Session Setup 2 answer SMBv2.
 				if data[16:18] == b"\x01\x00" and data[4:5] == b"\xfe":
-					print("Session Setup 2 answer SMBv2.")
+					#print("Session Setup 2 answer SMBv2.")
 					head = SMB2Header(
 						Cmd="\x01\x00",
 						MessageId=GrabMessageID(data).decode('latin-1'),
@@ -263,7 +263,7 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 
 				## Session Setup 3 answer SMBv2.
 				if data[16:18] == b'\x01\x00' and data[4:5] == b'\xfe' and (GrabMessageID(data)[0:1] == b'\x02' or GrabMessageID(data)[0:1] == b'\x03'):
-					print("Session Setup 3 answer SMBv2.")
+					#print("Session Setup 3 answer SMBv2.")
 					self.result = ParseSMBHash(data, self.client_address[0], Challenge)
 					ntstatus = "\x00\x00\x00\x00"
 					head = SMB2Header(
@@ -283,18 +283,18 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 					data = self.request.recv(1024)
 
 				if data[16:18] == b'\x03\x00' and data[4:5] == b'\xfe':
-					print("TreeConnect command SMBv2.")
+					#print("TreeConnect command SMBv2.")
 					tree = data[76:].decode("utf-16le")
 					share = tree.split("\\")[-1]
-					print("share:", share)
-					print("length of share:", len(share))
+					#print("share:", share)
+					#print("length of share:", len(share))
 					if len(share) == 32:
 						self.result['share_path'] = share
 						SaveToDb(self.result)
 
 				# Negotiate Protocol Response smbv1
 				if data[8:10] == b'\x72\x00' and data[4:5] == b'\xff' and re.search(rb'SMB 2.\?\?\?', data) == None:
-					print("Negotiate Protocol Response smbv1")
+					#print("Negotiate Protocol Response smbv1")
 					Header = SMBHeader(cmd="\x72",flag1="\x88", flag2="\x01\xc8", pid=pidcalc(NetworkRecvBufferPython2or3(data)),mid=midcalc(NetworkRecvBufferPython2or3(data)))
 					Body = SMBNegoKerbAns(Dialect=Parse_Nego_Dialect(NetworkRecvBufferPython2or3(data)))
 					Body.calculate()
@@ -306,7 +306,7 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 					data = self.request.recv(1024)
 
 				if data[8:10] == b"\x73\x00" and data[4:5] == b"\xff":  # Session Setup AndX Request smbv1
-					print("Session Setup AndX Request smbv1")
+					#print("Session Setup AndX Request smbv1")
 					IsNT4ClearTxt(data, self.client_address[0])
 
 					# STATUS_MORE_PROCESSING_REQUIRED
@@ -365,7 +365,7 @@ class SMB(BaseRequestHandler):  # SMB1 & SMB2 Server class, NTLM SSP (NT LAN Man
 
 
 				if data[8:10] == b"\x75\x00" and data[4:5] == b"\xff":  # Tree Connect AndX Request
-					print("Tree Connect AndX Request")
+					#print("Tree Connect AndX Request")
 					share_path = ParseShare(data)
 					if share_path:
 						client_ip = self.client_address[0]
